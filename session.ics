@@ -1,0 +1,17 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20210802T071622Z
+DESCRIPTION:Prathu Baronia(Prathu Baronia) is inviting you to a scheduled Zoom meeting.\n\nTopic: OJT: Memory Management in Linux\nTime: Aug 2\, 2021 03:00 PM Mumbai\, Kolkata\, New Delhi\n\nJoin Zoom Meeting\nhttps://myoas.zoom.com/j/99822511974?pwd=bVdtYmxyRkJuQXRrMmhyUzNPRG1BQT09\n\nMeeting ID: 998 2251 1974\nPassword: 076816\n\nJoin the ZOOM  in conference room：\n Enter the  "Meeting ID" and "Password" on the  table  screen according to the prompts.
+DTEND;TZID=Asia/Kolkata:20210802T160000
+DTSTART;TZID=Asia/Kolkata:20210802T150000
+LOCATION:https://myoas.zoom.us/j/99822511974?pwd=bVdtYmxyRkJuQXRrMmhyUzNPRG1BQT09
+SUMMARY;LANGUAGE=us-EN:OJT: Memory Management in Linux
+UID:{f526690f-ac9d-47ea-a9a4-af55d44f616c}
+BEGIN:VALARM
+TRIGGER:-PT10M
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR

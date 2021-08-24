@@ -1,0 +1,21 @@
+59f69c0000-7ffd711be000 ---p 00000000 00:00 0                            [rollup]
+Rss:               65184 kB
+Pss:                6694 kB
+Pss_Anon:           5466 kB
+Pss_File:           1225 kB
+Pss_Shmem:             3 kB
+Shared_Clean:      49656 kB
+Shared_Dirty:      10360 kB
+Private_Clean:         0 kB
+Private_Dirty:      5168 kB
+Referenced:        56308 kB
+Anonymous:         15480 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB

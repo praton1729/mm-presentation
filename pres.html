@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <meta name="author" content="Prathu Baronia">
+  <title>Memory management in Linux</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="./reveal.js/dist/reset.css">
+  <link rel="stylesheet" href="./reveal.js/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="./reveal.js/dist/theme/solarized.css" id="theme">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide">
+  <h1 class="title">Memory management in Linux</h1>
+  <p class="author">Prathu Baronia</p>
+  <p class="date">29-07-21</p>
+</section>
+
+<section id="process-memory-space" class="slide level1">
+<h1>Process memory space</h1>
+<!-- *intentionally not shown the kernel mapping* -->
+<figure>
+<img data-src="images/drawings/process_virtual_map_user_section.png" alt="virtual memory space" /><figcaption aria-hidden="true">virtual memory space</figcaption>
+</figure>
+</section>
+<section id="process-memory-space-1" class="slide level1">
+<h1>Process memory space</h1>
+<ul>
+<li>Virtual memory map
+<ul>
+<li>Allocation and freeing of automatic variables on stack.</li>
+<li>Mapping of zero pages to bss section to initialize static variables.</li>
+<li>Malloc acquires memory through <code>brk/sbrk</code> and <code>mmap</code> system calls.</li>
+</ul></li>
+</ul>
+<p><em>bss: Block Started by Symbol</em></p>
+<p>Next up <em>Memory descriptor</em></p>
+</section>
+<section id="struct-mm_structsimplified" class="slide level1">
+<h1>struct mm_struct(simplified)</h1>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> mm_struct</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span><span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> vm_are_struct <span class="op">*</span>mmap<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> rb_root mm_rb<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> vm_are_struct <span class="op">*</span>mmap_cache<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        atomic_t mm_users<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> map_count<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> start_code<span class="op">,</span> end_code<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> start_data<span class="op">,</span> end_data<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> start_brk<span class="op">,</span> brk<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> start_stack<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> mm_rss_stat rss_stat<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> total_vm<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        spinlock_t page_table_lock<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="some-less-talked-about-topics-in-c" class="slide level1">
+<h1>Some less talked about topics in C</h1>
+<ul>
+<li>Allocation of dynamic memory on stack with alloca.
+<ul>
+<li>Allocates <code>size</code> bytes of space in the stack frame of the caller.</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;alloca.h&gt;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>alloca<span class="op">(</span><span class="dt">size_t</span> size<span class="op">)</span></span></code></pre></div></li>
+<li>Also introduction of variable sized arrays in C99.</li>
+</ul>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span><span class="op">(</span>i<span class="op">=</span><span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> foo<span class="op">[</span>n<span class="op">+</span>i<span class="op">];</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* use foo */</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<ul>
+<li>On each iteration, foo is dynamically created and automatically cleaned up when it falls out of scope.</li>
+</ul>
+<p>Next up <em>paging</em></p>
+<!---# Types of addresses:
+
+- User virtual address 
+- Kernel virtual address : yeh nhi pta, yeh dekhna padega
+- Kernel logical address : yeh sort of pta hai but dekh lenge ek baar.
+--->
+</section>
+<section id="paging" class="slide level1">
+<h1>Paging</h1>
+<h2 id="what-does-a-page-represent">What does a page represent?</h2>
+<ul>
+<li>Kernel treats physical pages as the basic unit of memory management.</li>
+<li>Although processor can address anything as small as a byte or a word but the MMU deals in pages.</li>
+<li>Word size of a processor is an ambiguously defined term but usually it corresponds to the max size of the general purpose registers of the processor.</li>
+</ul>
+</section>
+<section id="page-representation-in-software" class="slide level1">
+<h1>Page representation in software</h1>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> page <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> flags<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    atomic_t _refcount<span class="op">;</span> <span class="co">/* References to this page */</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    atomic_t _mapcount<span class="op">;</span> <span class="co">/* References by a page table*/</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> private<span class="op">;</span> </span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> address_space <span class="op">*</span>mapping<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    pgoff_t index<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> list_head lru<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><em>simplified version</em></p>
+</section>
+<section id="organization-of-struct-page" class="slide level1">
+<h1>Organization of struct page</h1>
+<div class="sourceCode" id="cb5"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> page <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> flags<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">union</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> <span class="op">{</span> <span class="co">/* For page cache and anonymous pages */</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            <span class="op">....</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> <span class="op">{</span> <span class="co">/* Slab, slob, and slub*/</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            <span class="op">....</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> <span class="op">{</span> <span class="co">/* Tail pages of compound pages */</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>            <span class="op">....</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> <span class="op">{</span> <span class="co">/* Page table pages */</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">....</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span> <span class="co">/* Followed by _mapcount, _refcount etc.*/</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="struct-page-page-cache-and-anonymous-pages" class="slide level1">
+<h1>struct page: Page cache and anonymous pages</h1>
+<div class="sourceCode" id="cb6"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> page <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> flags<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> list_head lru<span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> address_space <span class="op">*</span>mapping<span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        pgoff_t index<span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> private<span class="op">;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    atomic_t _mapcount<span class="op">;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    atomic_t _refcount<span class="op">;</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> memcg_data<span class="op">;</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="struct-page-tail-pages-of-compound-pages" class="slide level1">
+<h1>struct page: Tail pages of compound pages</h1>
+<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> page <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> flags<span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> compound_head<span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">char</span> compound_dtor<span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">char</span> compound_order<span class="op">;</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        atomic_t compound_mapcount<span class="op">;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">int</span> compound_nr<span class="op">;</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    atomic_t _mapcount<span class="op">;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    atomic_t _refcount<span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> memcg_data<span class="op">;</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="struct-page-page-table-pages" class="slide level1">
+<h1>struct page: Page table pages</h1>
+<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> page <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> flags<span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> _pt_pad_1<span class="op">;</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        pgtable_t pmd_huge_pte<span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">long</span> _pt_pad_2<span class="op">;</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">struct</span> mm_struct <span class="op">*</span>pt_mm<span class="op">;</span> <span class="co">/* For x86 pgds only */</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>        spinlock_t <span class="op">*</span>ptl<span class="op">;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    atomic_t _mapcount<span class="op">;</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    atomic_t _refcount<span class="op">;</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> memcg_data<span class="op">;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="page-flags" class="slide level1">
+<h1>Page flags</h1>
+<ul>
+<li>There can be upto 28 page flags on a 64-bit system.
+<ul>
+<li>For eg. PG_dirty, PG_head, PG_mlocked, PG_active etc.</li>
+</ul></li>
+<li>The flags variable is declared an unsigned long so on:
+<ul>
+<li>32-bit systems it is 32 bits long.</li>
+<li>64-bit systems it is 64 bits long.</li>
+</ul></li>
+<li>The higher bits in the flags variable have been used to store the node and zone information of each page on NUMA systems. <img data-src="images/page-flags.png" title="Page flags on 32-bit systems" alt="page-flags" /></li>
+</ul>
+</section>
+<section id="page-flags-layout" class="slide level1">
+<h1>Page flags layout</h1>
+<ul>
+<li>No sparsemem:</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>    <span class="ex">-</span> <span class="kw">|</span>      <span class="ex">NODE</span>      <span class="kw">|</span> <span class="ex">ZONE</span> <span class="kw">|</span> <span class="ex">...</span> <span class="kw">|</span> <span class="ex">FLAGS</span> <span class="kw">|</span></span></code></pre></div>
+<ul>
+<li>classic sparse with space for node:</li>
+</ul>
+<div class="sourceCode" id="cb10"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>    <span class="ex">-</span> <span class="kw">|</span> <span class="ex">SECTION</span> <span class="kw">|</span> <span class="ex">NODE</span> <span class="kw">|</span> <span class="ex">ZONE</span> <span class="kw">|</span> <span class="ex">...</span> <span class="kw">|</span> <span class="ex">FLAGS</span> <span class="kw">|</span></span></code></pre></div>
+<ul>
+<li>classic sparse no space for node:</li>
+</ul>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>    <span class="ex">-</span> <span class="kw">|</span> <span class="ex">SECTION</span> <span class="kw">|</span>    <span class="ex">ZONE</span>     <span class="kw">|</span> <span class="ex">...</span> <span class="kw">|</span> <span class="ex">FLAGS</span> <span class="kw">|</span></span></code></pre></div>
+<ul>
+<li>Also the variants with <code>last_cpu_id</code> exist.</li>
+</ul>
+</section>
+<section id="page-size" class="slide level1">
+<h1>Page size</h1>
+<h2 id="definitions">Definitions</h2>
+<p><code>from arch/arm64/include/asm/page-defs.h</code></p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PAGE_SHIFT (CONFIG_ARM64_PAGE_SHIFT)</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PAGE_SIZE (1 &lt;&lt; PAGE_SHIFT)</span></span></code></pre></div>
+<h2 id="kconfig-options-for-page-size">Kconfig options for page size</h2>
+<ul>
+<li>Configuring page sizes by config options.</li>
+<li><code>from arch/arm64/Kconfig</code></li>
+</ul>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">config</span> ARM64_PAGE_SHIFT</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="ex">int</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="ex">default</span> 16 if ARM64_64K_PAGES</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="ex">default</span> 14 if ARM64_16K_PAGES</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="ex">default</span> 12 /<span class="pp">*</span> For 4KB pages <span class="pp">*</span>/</span></code></pre></div>
+</section>
+<section id="constraints-with-increase-size-of-struct-page" class="slide level1">
+<h1>Constraints with increase size of struct page</h1>
+<ul>
+<li>Size of page struct on arm64 is usually ~ 60 bytes(0x3C).</li>
+<li>Any increase in struct page size is felt around a million times.</li>
+</ul>
+<h2 id="lets-calculate">Let’s calculate</h2>
+<ul>
+<li>In a 4GB RAM system with 4KB pages we will have 2^20 physical pages.</li>
+<li>That means around 60 MB would be consumed by page structures.</li>
+</ul>
+<h2 id="memory-folios">Memory Folios</h2>
+<ul>
+<li>Pages are going to be replaced by memory folios soon.</li>
+</ul>
+<p><em>Next up Kernel stack</em></p>
+<!---# Page tables
+
+- Introduction of Page tables
+    - Improvements that multi-level page table brings
+    - Critical code related to page tables.
+    - Kernel newbies pe dekh sakte hain code flow ki details.
+    - KPTI pe thodi roshni daal sakte hain.
+--->
+</section>
+<section id="kernel-stack" class="slide level1">
+<h1>Kernel Stack</h1>
+<ul>
+<li>Problem and Solution</li>
+</ul>
+</section>
+<section id="kernel-stack-1" class="slide level1">
+<h1>Kernel Stack</h1>
+<h2 id="problem-at-hand">Problem at hand</h2>
+<ul>
+<li>Each process has its own stack for use when it is running in the kernel; in current kernels, that stack is sized at either 8KB or (on 64-bit systems) 16KB of memory.</li>
+<li>The stack lives in directly-mapped kernel memory, so it must be physically contiguous. That requirement alone can be problematic since, as memory gets fragmented, finding two or four physically contiguous pages can become difficult.</li>
+</ul>
+<h2 id="userspace-view">Userspace view</h2>
+<ul>
+<li>Can be viewed from userspace with:
+<ul>
+<li><code>cat /proc/&lt;pid&gt;/stack</code>.</li>
+</ul></li>
+</ul>
+</section>
+<section id="kernel-stack-continued" class="slide level1">
+<h1>Kernel stack (continued)</h1>
+<h2 id="things-to-lookout-for">Things to lookout for</h2>
+<ul>
+<li>Check autmatic variable allocation to avoid stack overflows.</li>
+<li>Recursion not allowed in the kernel.</li>
+</ul>
+<h2 id="defaults-currently-set.">Defaults currently set.</h2>
+<ul>
+<li>Size of stack: Configured by <code>THREAD_SIZE</code> macro.
+<ul>
+<li>Defined in <code>arch/arm64/include/asm/memory.h</code></li>
+</ul></li>
+<li>For <code>arm64</code> the default size is:
+<ul>
+<li><code>16KB</code> if <code>KASAN</code> is disabled</li>
+<li><code>32KB</code> if <code>KASAN</code> is enabled.</li>
+</ul></li>
+</ul>
+<h2 id="solution">Solution</h2>
+<ul>
+<li><a href="https://lwn.net/Articles/692208/">Virtual mapping of stacks</a></li>
+</ul>
+</section>
+<section id="common-memory-allocation-apis" class="slide level1">
+<h1>Common memory allocation APIs</h1>
+<ul>
+<li>kmalloc : contiguous physical addresses.</li>
+<li>vmalloc : contiguous virtual addresses(may not be physically contiguous)</li>
+<li>kvmalloc : Calls kmalloc and if it fails calls vmalloc.</li>
+</ul>
+<h2 id="common-use-cases.">Common use cases.</h2>
+<ul>
+<li>kmalloc : the most commonly used API to get subpage sized memory.</li>
+<li>vmalloc : only valid use case in the kernel at the moment is to allocate memory when kernel modules are loaded.</li>
+</ul>
+</section>
+<section id="kmalloc-internals" class="slide level1">
+<h1>kmalloc internals</h1>
+<div class="sourceCode" id="cb14"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>kmalloc<span class="op">(</span><span class="dt">size_t</span> size<span class="op">,</span> gfp_t flags<span class="op">)</span></span></code></pre></div>
+<ul>
+<li>It might allocate more than the programmer asked for but it will atleast allocate the requested size.</li>
+<li>Max and min allocation capping are explained later using code.</li>
+<li>Declared with <code>__always_inline</code> to boost the fastpath allocations.
+<ul>
+<li>This attribute inlines the function independent of any restrictions that otherwise apply to inlining</li>
+</ul></li>
+<li>Notice the difference with <code>inline</code> here since we don’t want to leave it at compiler’s discretion or the optimization level specified.</li>
+</ul>
+</section>
+<section id="kmalloc-min-and-max-limits-on-allocation" class="slide level1">
+<h1>kmalloc: min and max limits on allocation</h1>
+<ul>
+<li>Min: 8 bytes</li>
+<li>Max: 4 MB, well actually 2 MB(explained later).</li>
+</ul>
+<p><code>from include/linux/slab.h</code></p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define MAX_ORDER 11</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_SHIFT_HIGH (PAGE_SHIFT+1) </span><span class="co">// 13</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_SHIFT_MAX (MAX_ORDER+PAGE_SHIFT-1) </span><span class="co">// 22</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_SHIFT_LOW 3</span></span></code></pre></div>
+</section>
+<section id="kmalloc-min-and-max-limits-on-allocation-1" class="slide level1">
+<h1>kmalloc: min and max limits on allocation</h1>
+<p><code>from include/linux/slab.h</code></p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">/* Maximum allocatable size = 4MB */</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_MAX_SIZE (1 &lt;&lt; KMALLOC_SHIFT_MAX)</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co">/* Max size for which we can use a slab cache = 8KB */</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_CACHE_SIZE (1 &lt;&lt; KMALLOC_SHIFT_HIGH)</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co">/* Max order allocatable via the slab allocator = 10 */</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_MAX_ORDER (KMALLOC_SHIFT_MAX - PAGE_SHIFT)</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="co">/* Minimum allocatable size = 8 bytes */</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#define KMALLOC_MIN_SIZE (1 &lt;&lt; KMALLOC_SHIFT_LOW)</span></span></code></pre></div>
+</section>
+<section id="allocation-flags" class="slide level1">
+<h1>Allocation flags</h1>
+<ul>
+<li>Action modifiers: Specify how the kernel is supposed to allocate memory.</li>
+<li>Zone modifiers: Specify from which zone to allocate the memory.</li>
+<li>Type modifiers: Combination of action and zone modifiers as needed by a certain type of memory.</li>
+</ul>
+</section>
+<section id="examples" class="slide level1">
+<h1>Examples</h1>
+<ul>
+<li>Action modifiers: <code>__GFP_WAIT, __GFP_NOFAIL, __GFP_COMP etc.</code></li>
+<li>Zone modifiers: <code>__GFP_DMA, __GFP_HIGHMEM etc.</code></li>
+<li>Type modifiers: <code>GFP_ATOMIC, GFP_KERNEL, GFP_USER etc.</code></li>
+</ul>
+<h2 id="commonly-used-type-modifier-flags">Commonly used type modifier flags</h2>
+<ul>
+<li><code>GFP_KERNEL</code>: Normal allocation and might block. To be used in process context when we can sleep.</li>
+<li><code>GFP_ATOMIC</code>: High priority and cannot sleep. Can be used in interrupt handlers.</li>
+<li><code>GFP_USER</code>: Might block. Used to allocate memory for userspace processes.</li>
+</ul>
+<p><em>GFP stands get free pages</em></p>
+</section>
+<section id="expansion-of-common-modifiers" class="slide level1">
+<h1>Expansion of common modifiers</h1>
+<ul>
+<li><code>GFP_ATOMIC</code>: <code>(__GFP_HIGH)</code></li>
+<li><code>GFP_KERNEL</code>: <code>(__GFP_WAIT|__GFP_IO|__GFP_FS)</code></li>
+<li><code>GFP_USER</code>: <code>(__GFP_WAIT|__GFP_IO|__GFP_FS)</code></li>
+</ul>
+</section>
+<section id="kmalloc-code-flow" class="slide level1">
+<h1>kmalloc code flow</h1>
+<figure>
+<img data-src="images/drawings/kmalloc_code_flow.png" alt="kmalloc_code_flow" /><figcaption aria-hidden="true">kmalloc_code_flow</figcaption>
+</figure>
+</section>
+<section id="kmalloc-code-walkthrough" class="slide level1">
+<h1>kmalloc code walkthrough</h1>
+<div class="sourceCode" id="cb17"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>kmalloc<span class="op">(</span><span class="dt">size_t</span> size<span class="op">,</span> gfp_t flags<span class="op">)</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>__builtin_constant_p<span class="op">(</span>size<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">unsigned</span> <span class="dt">int</span> index<span class="op">;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>size <span class="op">&gt;</span> KMALLOC_MAX_CACHE_SIZE<span class="op">)</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> kmalloc_large<span class="op">(</span>size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        index <span class="op">=</span> kmalloc_index<span class="op">(</span>size<span class="op">);</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>index<span class="op">)</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> ZERO_SIZE_PTR<span class="op">;</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> kmem_cache_alloc_trace<span class="op">(</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>            kmalloc_caches<span class="op">[</span>kmalloc_type<span class="op">(</span>flags<span class="op">)][</span>index<span class="op">],</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>            flags<span class="op">,</span> size<span class="op">);</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> __kmalloc<span class="op">(</span>size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">/* from include/linux/slab.h */</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<h2 id="builtin_constant_p">__builtin_constant_p</h2>
+<ul>
+<li>You can use the built-in function <code>__builtin_constant_p</code> to determine if a value is known to be constant at compile time and hence that GCC can perform constant-folding on expressions involving that value.</li>
+</ul>
+<p><em><a href="https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html">Ref link</a></em></p>
+</section>
+<section id="what-is-constant-folding" class="slide level1">
+<h1>What is constant-folding?</h1>
+<ul>
+<li>Expressions with constant operands can be evaluated at compile time, thus improving run-time performance and reducing code size by avoiding evaluation at compile-time.</li>
+<li>Programmers generally do not write expressions such as <code>(3 + 5)</code> directly, but these expressions are relatively common after macro expansion and other optimizations such as constant propagation.</li>
+<li>Since kmalloc would be inlined at all places due to <code>__always_inline</code> attribute we can optimize a lot of compile time determined constant size allocations.</li>
+</ul>
+<p><em><a href="https://compileroptimizations.com/category/constant_folding.htm">Constant folding</a></em></p>
+<p><em><a href="https://compileroptimizations.com/category/constant_propagation.htm">Constant propagation</a></em></p>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-1" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<ul>
+<li><code>KMALLOC_MAX_CACHE_SIZE</code>
+<ul>
+<li>Max size for which we use a slab cache.</li>
+<li>For SLUB its value is 8KB.</li>
+</ul></li>
+</ul>
+<div class="sourceCode" id="cb18"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>kmalloc_large<span class="op">(</span><span class="dt">size_t</span> size<span class="op">,</span> gfp_t flags<span class="op">)</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">int</span> order <span class="op">=</span> get_order<span class="op">(</span>size<span class="op">);</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> kmalloc_order_trace<span class="op">(</span>size<span class="op">,</span> flags<span class="op">,</span> order<span class="op">);</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-2" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb19"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>kmalloc_order_trace<span class="op">(</span>size<span class="op">,</span> flags<span class="op">,</span> order<span class="op">)</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> kmalloc_order<span class="op">(</span>size<span class="op">,</span> flags<span class="op">,</span> order<span class="op">);</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><em>Argument types omitted intentionally.</em></p>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-3" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb20"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>kmalloc_order<span class="op">(</span>size<span class="op">,</span> flags<span class="op">,</span> order<span class="op">)</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>ret<span class="op">;</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> page <span class="op">*</span>page<span class="op">;</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    flags <span class="op">|=</span> __GFP_COMP<span class="op">;</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    page <span class="op">=</span> alloc_pages<span class="op">(</span>flags<span class="op">,</span> order<span class="op">);</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> page <span class="op">?</span> page_address<span class="op">(</span>page<span class="op">)</span> <span class="op">:</span> NULL<span class="op">;</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> kasan_kmalloc_large<span class="op">();</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    kmemleak_alloc<span class="op">(</span>ret<span class="op">,</span> size<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret<span class="op">;</span> </span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>EXPORT_SYMBOL<span class="op">(</span>kmalloc_order<span class="op">)</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-4" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<h2 id="kmalloc_index">kmalloc_index()</h2>
+<ul>
+<li>Figure out which kmalloc slab an allocation of a certain size belongs to.</li>
+</ul>
+<div class="sourceCode" id="cb21"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define kmalloc_index(s) __kmalloc_index(s, true)</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-5" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<p><code>from include/linux/slab.h</code></p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="dt">unsigned</span> <span class="dt">int</span> __kmalloc_index<span class="op">(</span>size<span class="op">,</span> size_is_constant<span class="op">)</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* 0 = zero alloc */</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* 1 = 65 to 96 bytes */</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* 2 = 129 to 192 bytes */</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* n = 2^(n-1)+1 to 2^n bytes */</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Let’s checkout <code>kmalloc_info</code> to understand this.</p>
+</section>
+<section id="zero_size_ptr" class="slide level1">
+<h1>ZERO_SIZE_PTR</h1>
+<ul>
+<li>ZERO_SIZE_PTR will be returned for zero sized kmalloc requests.</li>
+</ul>
+<div class="sourceCode" id="cb23"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define ZERO_SIZE_PTR ((void *)16)</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define ZERO_OR_NULL_PTR(x) ((unsigned long)(x) &lt;= \</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="pp">                (unsigned long)ZERO_SIZE_PTR)</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-6" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb24"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>kmem_cache_alloc_trace<span class="op">(</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>            the_kmem_cache<span class="op">,</span> flags<span class="op">,</span> size<span class="op">)</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>ret <span class="op">=</span> kmem_cache_alloc<span class="op">(</span>the_kmem_cache<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> kasan_malloc<span class="op">(</span>the_kmem_cache<span class="op">,</span> ret<span class="op">,</span> size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret<span class="op">;</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<!---# kmalloc code walkthrough(continued)
+
+```C
+kmalloc_caches
+```
+--->
+</section>
+<section id="showing-the-kmalloc-slab-caches" class="slide level1">
+<h1>Showing the kmalloc slab caches</h1>
+<p><code>$ sudo cat /proc/slabinfo</code></p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-8k</span>   <span class="op">&lt;</span>- 8KB = KMALLOC_MAX_CACHE_SIZE</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-4k</span>  </span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-2k</span>  </span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-1k</span>  </span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-512</span> </span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-256</span> </span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-192</span> <span class="op">&lt;</span>- Non-power 2 sized kmalloc cache</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-128</span> </span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-96</span>  <span class="op">&lt;</span>- Non-power 2 sized kmalloc cache</span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-64</span>  </span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-32</span>  </span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-16</span>  </span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a><span class="ex">kmalloc-8</span>  <span class="op">&lt;</span>- 8 bytes = KMALLOC_MIN_SIZE</span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-7" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<p><em>if CONFIG_ZONE_DMA is defined</em></p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> kmalloc_cache_type kmalloc_type<span class="op">(</span>flags<span class="op">)</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span><span class="op">(</span>likely<span class="op">((</span>flags <span class="op">&amp;</span> <span class="op">(</span>__GFP_DMA<span class="op">|</span>__GFP_RECLAIM<span class="op">))</span> <span class="op">==</span> <span class="dv">0</span><span class="op">))</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> KMA_NORMAL<span class="op">;</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> flags <span class="op">&amp;</span> __GFP_DMA <span class="op">?</span> KMA_DMA <span class="op">:</span> KMA_RECLAIM<span class="op">;</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><em>KMA: KMALLOC</em></p>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-8" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb27"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>__kmalloc<span class="op">(</span>size<span class="op">,</span> flags<span class="op">)</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> kmem_cache <span class="op">*</span>s<span class="op">;</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>ret<span class="op">;</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span><span class="op">(</span>unlikely<span class="op">(</span>size <span class="op">&gt;</span> KMALLOC_MAX_CACHE_SIZE<span class="op">))</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> kmalloc_large<span class="op">(</span>size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> kmalloc_slab<span class="op">(</span>size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> slab_alloc<span class="op">(</span>s<span class="op">,</span> flags<span class="op">,</span> _RET_IP_<span class="op">);</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> kasan_malloc<span class="op">(</span>s<span class="op">,</span> ret<span class="op">,</span> size<span class="op">,</span> flags<span class="op">);</span></span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret<span class="op">;</span></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>EXPORT_SYMBOL<span class="op">(</span>__kmalloc<span class="op">);</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-9" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb28"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> kmem_cache <span class="op">*</span>kmalloc_slab<span class="op">(</span>size<span class="op">,</span> flags<span class="op">)</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="co">/* Find the kmem_cache structure that serves a </span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * given size of allocation. Refers to a look up</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * table for sizes &lt; 192 bytes and does an fls for</span></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * sizes &gt; 192. Look up table is called size_index.</span></span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * Similar to kmalloc_index */</span></span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a><span class="co">/* I think these two routines can be merged */</span></span>
+<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>fls<span class="op">:</span> find last<span class="op">(</span>most<span class="op">-</span>significant<span class="op">)</span> bit set<span class="op">.</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-10" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<p><em>from mm/slub.c</em></p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>slab_alloc<span class="op">(</span>kmem_cache<span class="op">,</span> flags<span class="op">,</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>            addr<span class="op">,</span> size<span class="op">)</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> slab_alloc_node<span class="op">(</span>kmem_cache<span class="op">,</span> flags<span class="op">,</span> </span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>            NUMA_NO_NODE<span class="op">,</span> addr<span class="op">,</span> size<span class="op">);</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="kmalloc-code-walkthroughcontinued-11" class="slide level1">
+<h1>kmalloc code walkthrough(continued)</h1>
+<p><em>from mm/slub.c</em></p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">void</span> <span class="op">*</span>slab_alloc_node<span class="op">(</span>kmem_cache<span class="op">,</span> flags<span class="op">,</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>            addr<span class="op">,</span> size<span class="op">)</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">/*read tid and cpu_slab ptr*/</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">/*read freelist and slab page*/</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">/*fastpath*/</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>new_object <span class="op">=</span> get_freepointer_safe<span class="op">(</span>s<span class="op">,</span> object<span class="op">);</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">/*make sure we are on the right cpu*/</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>    prefetch_freepointer<span class="op">(</span>kmem_cache_ptr<span class="op">,</span> next_object<span class="op">);</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">/*slowpath*/</span></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> __slab_alloc<span class="op">(</span>kmem_cache_ptr<span class="op">,</span> flags<span class="op">,</span> node</span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>            addr<span class="op">,</span> kmem_cache_cpu_ptr<span class="op">);</span></span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="fastpath-kmalloc-code-walkthroughcontinued" class="slide level1">
+<h1>Fastpath: kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb32"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>get_freepointer_safe<span class="op">(</span>kmem_cache_ptr<span class="op">,</span> <span class="dt">void</span> <span class="op">*</span>object<span class="op">)</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">unsigned</span> <span class="dt">long</span> freeptr_addr<span class="op">;</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>p<span class="op">;</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    freeptr_addr <span class="op">=</span> <span class="op">(</span><span class="dt">unsigned</span> <span class="dt">long</span><span class="op">)</span>object <span class="op">+</span> kcp<span class="op">-&gt;</span>offset<span class="op">;</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    copy_from_kernel_nofault<span class="op">(&amp;</span>p<span class="op">,</span> <span class="op">(</span><span class="dt">void</span> <span class="op">**)</span>freeptr_addr<span class="op">,</span> </span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>            <span class="kw">sizeof</span><span class="op">(</span>p<span class="op">));</span></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p<span class="op">;</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><em>kcp: kmem_cache_ptr</em></p>
+</section>
+<section id="fastpath-kmalloc-code-walkthroughcontinued-1" class="slide level1">
+<h1>Fastpath: kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb33"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> copy_from_kernel_nofault<span class="op">(</span>dst<span class="op">,</span> src<span class="op">,</span> size<span class="op">)</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* Assuming a black box for now.*/</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="fastpath-kmalloc-code-walkthroughcontinued-2" class="slide level1">
+<h1>Fastpath: kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb34"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> prefetch_freepointer<span class="op">(</span>kmem_cache_ptr<span class="op">,</span> <span class="dt">void</span> <span class="op">*</span>obj<span class="op">)</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>    prefetch<span class="op">(</span>obj <span class="op">+</span> kcp<span class="op">-&gt;</span>offset<span class="op">);</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb35"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> prefetch<span class="op">(</span><span class="dt">void</span> <span class="op">*</span>ptr<span class="op">)</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>    asm <span class="dt">volatile</span><span class="op">(</span><span class="st">&quot;prfm pldl1keep, %a0</span><span class="sc">\n</span><span class="st">&quot;</span> <span class="op">:</span> <span class="op">:</span> <span class="st">&quot;p&quot;</span> <span class="op">(</span>ptr<span class="op">));</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<ul>
+<li><code>%a</code>: for generating absolute addresses instead of labels.</li>
+<li><code>"p"</code> : This is called a modifier in inline asm syntax.
+<ul>
+<li>An operand that is a valid memory address is allowed.</li>
+<li>This is for “load address” and “push address” instructions.</li>
+</ul></li>
+</ul>
+</section>
+<section id="prfm" class="slide level1">
+<h1><code>prfm</code></h1>
+<ul>
+<li>Instruction format <code>prfm &lt;type&gt;&lt;target&gt;&lt;policy&gt;</code>.</li>
+<li><code>prfm</code> stands for Prefetch memory.</li>
+<li><code>pldl1keep</code> can be divided into 3 parts:
+<ul>
+<li><code>pld</code> : Type: Prefetch for load. Could be:
+<ul>
+<li><code>pst</code> : Prefetch for store.</li>
+<li><code>pli</code> : Prefetch for instructions.</li>
+</ul></li>
+<li><code>l1</code>/<code>L1</code> : Target: Target is L1 cache.
+<ul>
+<li>Could be L1/L2/L3.</li>
+</ul></li>
+<li><code>keep</code> : Policy: Allocated in the cache normally.
+<ul>
+<li>Could be <code>strm</code> which is for data that is used only once.</li>
+</ul></li>
+</ul></li>
+</ul>
+</section>
+<section id="slowpath-kmalloc-code-walkthroughcontinued" class="slide level1">
+<h1>Slowpath: kmalloc code walkthrough(continued)</h1>
+<div class="sourceCode" id="cb36"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="op">*</span>__slab_alloc<span class="op">(</span>kcp<span class="op">,</span> flags<span class="op">,</span> node<span class="op">,</span> </span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>        addr<span class="op">,</span> kmem_cache_cpu_ptr<span class="op">)</span></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="to-be-continued-with-kfree" class="slide level1">
+<h1>To be continued with kfree()</h1>
+<ul>
+<li>Thanks for attending!</li>
+<li>Let’s do some Q &amp; A.</li>
+</ul>
+</section>
+<section id="kfree-api" class="slide level1">
+<h1>kfree API</h1>
+<div class="sourceCode" id="cb37"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> kfree<span class="op">(</span><span class="dt">const</span> <span class="dt">void</span> <span class="op">*</span>ptr<span class="op">);</span></span></code></pre></div>
+</section>
+<section id="kfree-codewalkthrough" class="slide level1">
+<h1>kfree codewalkthrough</h1>
+<p><code>from mm/slub.c</code></p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> kree<span class="op">(</span><span class="dt">const</span> <span class="dt">void</span> <span class="op">*</span>x<span class="op">)</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> page <span class="op">*</span>page<span class="op">;</span></span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="op">*</span>object <span class="op">=</span> <span class="op">(</span><span class="dt">void</span> <span class="op">*)</span>x<span class="op">;</span></span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* handling if x is zero or null ptr*/</span></span>
+<span id="cb38-7"><a href="#cb38-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-8"><a href="#cb38-8" aria-hidden="true" tabindex="-1"></a>    page <span class="op">=</span> virt_to_head_page<span class="op">(</span>x<span class="op">);</span></span>
+<span id="cb38-9"><a href="#cb38-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-10"><a href="#cb38-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">/* handling if page is not PageSlab*/</span></span>
+<span id="cb38-11"><a href="#cb38-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-12"><a href="#cb38-12" aria-hidden="true" tabindex="-1"></a>    slab_free<span class="op">(</span>page<span class="op">-&gt;</span>slab_cache<span class="op">,</span> page<span class="op">,</span> object<span class="op">,</span> NULL<span class="op">,</span> </span>
+<span id="cb38-13"><a href="#cb38-13" aria-hidden="true" tabindex="-1"></a>        <span class="dv">1</span><span class="op">,</span> _RET_IP<span class="op">);</span></span>
+<span id="cb38-14"><a href="#cb38-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb38-15"><a href="#cb38-15" aria-hidden="true" tabindex="-1"></a>EXPORT_SYMBOL<span class="op">(</span>kfree<span class="op">);</span></span></code></pre></div>
+</section>
+    </div>
+  </div>
+
+  <script src="./reveal.js/dist/reveal.js"></script>
+
+  <!-- reveal.js plugins -->
+  <script src="./reveal.js/plugin/notes/notes.js"></script>
+  <script src="./reveal.js/plugin/search/search.js"></script>
+  <script src="./reveal.js/plugin/zoom/zoom.js"></script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+        // Display controls in the bottom right corner
+        controls: true,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: true,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'bottom-right',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'faded',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: false,
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: false,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: false,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: true,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'default',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: true,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'slide',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'fade',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // reveal.js plugins
+        plugins: [
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    </body>
+</html>
